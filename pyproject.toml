@@ -1,0 +1,12 @@
+[project]
+name = "kosto"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "customtkinter == 5.2.2",
+]
+
+[dependency-groups]
+dev = [
+    "pyinstaller == 6.20.0",
+]
