@@ -23,3 +23,6 @@ dist/
 # Archivos ocultos del sistema
 .DS_Store
 Thumbs.db
+
+#Contexto para el agente de IA
+CONTEXT.md
