@@ -1,0 +1,10 @@
+# Forzar a que todos los archivos de texto manejen saltos de línea automáticos
+* text=auto
+
+# Asegurar que los archivos de Python siempre usen LF (estándar de Python)
+*.py text eol=lf
+
+# Asegurar que los archivos de configuración y markdown usen LF
+*.toml text eol=lf
+*.md text eol=lf
+.gitignore text eol=lf

@@ -1,0 +1,25 @@
+# Entorno virtual y dependencias de uv
+.venv/
+.uv/
+
+# Caché de Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+
+# Base de datos local (para desarrollo)
+*.db
+*.db-journal
+*.db-wal
+
+# Archivos temporales de compilación (PyInstaller)
+build/
+dist/
+*.spec
+
+# Archivos ocultos del sistema
+.DS_Store
+Thumbs.db
