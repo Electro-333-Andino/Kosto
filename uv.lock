@@ -47,10 +47,10 @@ dev = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "customtkinter", specifier = ">=5.2.2" }]
+requires-dist = [{ name = "customtkinter", specifier = "==5.2.2" }]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pyinstaller", specifier = ">=6.20.0" }]
+dev = [{ name = "pyinstaller", specifier = "==6.20.0" }]
 
 [[package]]
 name = "macholib"
