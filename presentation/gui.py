@@ -114,7 +114,6 @@ class KostoApp(ctk.CTk):
             fg_color=self.COLOR_BG_PRINCIPAL,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
-            focused_border_color=self.COLOR_BOTONES,
             height=35,
         )
         self.entry_nombre.grid(row=2, column=0, padx=20, pady=(0, 15), sticky="ew")
@@ -135,7 +134,6 @@ class KostoApp(ctk.CTk):
             fg_color=self.COLOR_BG_PRINCIPAL,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
-            focused_border_color=self.COLOR_BOTONES,
             height=35,
         )
         self.entry_costo_total.grid(row=4, column=0, padx=20, pady=(0, 15), sticky="ew")
@@ -156,7 +154,6 @@ class KostoApp(ctk.CTk):
             fg_color=self.COLOR_BG_PRINCIPAL,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
-            focused_border_color=self.COLOR_BOTONES,
             height=35,
         )
         self.entry_unidades.grid(row=6, column=0, padx=20, pady=(0, 20), sticky="ew")
@@ -224,7 +221,6 @@ class KostoApp(ctk.CTk):
             fg_color=self.COLOR_BG_PRINCIPAL,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
-            focused_border_color=self.COLOR_BOTONES,
             height=35,
         )
         self.entry_precio_manual.grid(
@@ -330,7 +326,6 @@ class KostoApp(ctk.CTk):
             fg_color=self.COLOR_BG_SECUNDARIO,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
-            focused_border_color=self.COLOR_BOTONES,
             height=35,
         )
         self.entry_buscar.grid(row=0, column=1, sticky="ew")
