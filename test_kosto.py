@@ -9,6 +9,7 @@ Utiliza 'unittest' de la librería estándar de Python.
 import os
 import sqlite3
 import unittest
+from decimal import Decimal
 
 from domain.models import Producto
 from infrastructure.database import DatabaseManager
@@ -32,11 +33,11 @@ class TestProductoDomain(unittest.TestCase):
             precio_manual=0.35,
         )
         # 3.67 / 12 = 0.305833... -> redondeado a 4 decimales: 0.3058
-        self.assertEqual(p.costo_unitario_real, 0.3058)
+        self.assertEqual(p.costo_unitario_real, Decimal("0.3058"))
         # Costo unitario real (0.3058) redondeado a 2 decimales: 0.31
-        self.assertEqual(p.precio_sugerido, 0.31)
+        self.assertEqual(p.precio_sugerido, Decimal("0.31"))
         # Ganancia: 0.35 - 0.3058 = 0.0442
-        self.assertEqual(p.ganancia_neta, 0.0442)
+        self.assertEqual(p.ganancia_neta, Decimal("0.0442"))
 
     def test_precio_manual_por_defecto_sugerido(self) -> None:
         """
@@ -46,10 +47,10 @@ class TestProductoDomain(unittest.TestCase):
         p = Producto(
             nombre="Harina de Trigo", costo_total=10.00, unidades_por_paquete=10
         )
-        self.assertEqual(p.costo_unitario_real, 1.0000)
-        self.assertEqual(p.precio_sugerido, 1.00)
-        self.assertEqual(p.precio_manual, 1.00)
-        self.assertEqual(p.ganancia_neta, 0.00)
+        self.assertEqual(p.costo_unitario_real, Decimal("1.0000"))
+        self.assertEqual(p.precio_sugerido, Decimal("1.00"))
+        self.assertEqual(p.precio_manual, Decimal("1.00"))
+        self.assertEqual(p.ganancia_neta, Decimal("0.00"))
 
     def test_actualizar_precio_manual_exito(self) -> None:
         """
@@ -60,9 +61,9 @@ class TestProductoDomain(unittest.TestCase):
         )
         # Costo real = 0.50, Sugerido = 0.50, Manual Inicial = 0.50, Ganancia Inicial = 0.00
         p.update_precio_manual(0.75)
-        self.assertEqual(p.precio_manual, 0.75)
+        self.assertEqual(p.precio_manual, Decimal("0.75"))
         # Ganancia: 0.75 - 0.50 = 0.25
-        self.assertEqual(p.ganancia_neta, 0.25)
+        self.assertEqual(p.ganancia_neta, Decimal("0.25"))
 
     def test_validaciones_valores_invalidos(self) -> None:
         """
@@ -112,6 +113,10 @@ class TestDatabaseManager(unittest.TestCase):
         # Inicializar base de datos limpia en memoria para cada prueba
         self.db = DatabaseManager(":memory:")
 
+    def tearDown(self) -> None:
+        # Cerrar la conexión para evitar fugas de descriptores de archivos
+        self.db.cerrar_conexion()
+
     def test_db_inicializacion(self) -> None:
         """
         Verifica que la tabla productos se cree correctamente.
@@ -147,14 +152,14 @@ class TestDatabaseManager(unittest.TestCase):
         prod_recuperado = productos[0]
         self.assertEqual(prod_recuperado.id, p_guardado.id)
         self.assertEqual(prod_recuperado.nombre, "Azúcar 1kg")
-        self.assertEqual(prod_recuperado.costo_total, 12.50)
+        self.assertEqual(prod_recuperado.costo_total, Decimal("12.50"))
         self.assertEqual(prod_recuperado.unidades_por_paquete, 10)
-        self.assertEqual(prod_recuperado.precio_manual, 1.50)
+        self.assertEqual(prod_recuperado.precio_manual, Decimal("1.50"))
 
         # Comprobar que los campos calculados se recalcularon correctamente al recuperar
-        self.assertEqual(prod_recuperado.costo_unitario_real, 1.25)
-        self.assertEqual(prod_recuperado.precio_sugerido, 1.25)
-        self.assertEqual(prod_recuperado.ganancia_neta, 0.25)
+        self.assertEqual(prod_recuperado.costo_unitario_real, Decimal("1.2500"))
+        self.assertEqual(prod_recuperado.precio_sugerido, Decimal("1.25"))
+        self.assertEqual(prod_recuperado.ganancia_neta, Decimal("0.2500"))
 
     def test_actualizar_producto_exito(self) -> None:
         """
@@ -176,8 +181,8 @@ class TestDatabaseManager(unittest.TestCase):
         self.assertEqual(len(productos), 1)
         p_act = productos[0]
         self.assertEqual(p_act.nombre, "Café Soluble Premium")
-        self.assertEqual(p_act.precio_manual, 3.00)
-        self.assertEqual(p_act.ganancia_neta, 1.00)
+        self.assertEqual(p_act.precio_manual, Decimal("3.00"))
+        self.assertEqual(p_act.ganancia_neta, Decimal("1.00"))
 
     def test_obtener_productos_con_filtro_busqueda(self) -> None:
         """

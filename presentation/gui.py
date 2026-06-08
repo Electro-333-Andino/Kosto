@@ -7,13 +7,90 @@ No contiene lógica de negocios ni de acceso a datos directa, sino que delega en
 """
 
 import tkinter as tk
-from tkinter import messagebox
+from decimal import Decimal, InvalidOperation
 from typing import Optional
 
 import customtkinter as ctk
 
 from domain.models import Producto
 from infrastructure.database import DatabaseManager
+
+
+class CustomConfirmDialog(ctk.CTkToplevel):
+    """
+    Cuadro de diálogo de confirmación personalizado y modal.
+    Adopta completamente el tema oscuro y los colores de la paleta Catppuccin Mocha del padre.
+    """
+
+    def __init__(self, parent: "KostoApp", title: str, message: str):
+        super().__init__(parent)
+        self.parent = parent
+        self.title(title)
+        self.result = False
+
+        # Configuración de comportamiento modal (bloquea el parent)
+        self.transient(parent)
+        self.grab_set()
+        self.resizable(False, False)
+
+        # Aplicar fondo de la paleta Catppuccin Mocha
+        self.configure(fg_color=parent.COLOR_BG_SECUNDARIO)
+
+        # Centrar la ventana de diálogo respecto a la ventana padre
+        parent.update_idletasks()
+        x = parent.winfo_x() + (parent.winfo_width() // 2) - 175
+        y = parent.winfo_y() + (parent.winfo_height() // 2) - 100
+        self.geometry(f"350x180+{x}+{y}")
+
+        # Mensaje del cuadro de diálogo
+        self.lbl_msg = ctk.CTkLabel(
+            self,
+            text=message,
+            text_color=parent.COLOR_TEXTO_PRINCIPAL,
+            font=ctk.CTkFont(family="Arial", size=13),
+            wraplength=310,
+            justify="center",
+        )
+        self.lbl_msg.pack(fill="both", expand=True, padx=20, pady=(20, 10))
+
+        # Contenedor para botones de acción
+        self.frame_buttons = ctk.CTkFrame(self, fg_color="transparent")
+        self.frame_buttons.pack(fill="x", side="bottom", padx=20, pady=(10, 20))
+
+        # Botón para confirmar (Eliminar)
+        self.btn_yes = ctk.CTkButton(
+            self.frame_buttons,
+            text="Sí, eliminar",
+            fg_color=parent.COLOR_INDICADOR_ERROR,
+            hover_color="#eba0ac",
+            text_color="#11111b",
+            font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+            command=self.on_yes,
+        )
+        self.btn_yes.pack(side="left", fill="x", expand=True, padx=(0, 5))
+
+        # Botón para cancelar
+        self.btn_no = ctk.CTkButton(
+            self.frame_buttons,
+            text="Cancelar",
+            fg_color=parent.COLOR_BORDE,
+            hover_color="#45475a",
+            text_color=parent.COLOR_TEXTO_PRINCIPAL,
+            font=ctk.CTkFont(family="Arial", size=12, weight="bold"),
+            command=self.on_no,
+        )
+        self.btn_no.pack(side="right", fill="x", expand=True, padx=(5, 0))
+
+        # Bloquear el flujo del hilo principal hasta cerrar la ventana
+        self.wait_window(self)
+
+    def on_yes(self) -> None:
+        self.result = True
+        self.destroy()
+
+    def on_no(self) -> None:
+        self.result = False
+        self.destroy()
 
 
 class KostoApp(ctk.CTk):
@@ -25,8 +102,9 @@ class KostoApp(ctk.CTk):
         super().__init__()
         self.db = db
 
-        # Guardar estado de edición
+        # Guardar estado de edición e hilos de temporizador (search debounce)
         self.producto_seleccionado_id: Optional[int] = None
+        self._search_timer_id: Optional[str] = None
 
         # Configuración básica de la ventana
         self.title("KOSTO - Control de Inventario y Márgenes")
@@ -329,7 +407,8 @@ class KostoApp(ctk.CTk):
             height=35,
         )
         self.entry_buscar.grid(row=0, column=1, sticky="ew")
-        self.entry_buscar.bind("<KeyRelease>", lambda e: self.refresh_list())
+        # Enlazar la búsqueda al mecanismo de anti-rebote (debounce) para optimizar rendimiento
+        self.entry_buscar.bind("<KeyRelease>", self.al_escribir_busqueda)
 
         self.btn_limpiar_buscar = ctk.CTkButton(
             self.frame_buscador,
@@ -357,16 +436,7 @@ class KostoApp(ctk.CTk):
 
         # Grid para las columnas de cabecera
         # Configurar anchos proporcionales idénticos a los de las filas
-        self.column_weights = [
-            4,
-            2,
-            1,
-            2,
-            2,
-            2,
-            2,
-            3,
-        ]  # Ajustado: Nombre tiene 4, Unidades 1, Acciones 3, etc.
+        self.column_weights = [4, 2, 1, 2, 2, 2, 2, 3]
         for idx, w in enumerate(self.column_weights):
             self.frame_headers.grid_columnconfigure(idx, weight=w, uniform="table_col")
 
@@ -409,10 +479,19 @@ class KostoApp(ctk.CTk):
         self.scroll_table.grid(row=2, column=0, sticky="nsew")
         self.scroll_table.grid_columnconfigure(0, weight=1)
 
+    def al_escribir_busqueda(self, event: tk.Event) -> None:
+        """
+        Interviene el evento de tipeo aplicando un debounce de 300 ms.
+        Esto previene la destrucción y recreación incesante de widgets de la lista.
+        """
+        if self._search_timer_id is not None:
+            self.after_cancel(self._search_timer_id)
+        self._search_timer_id = self.after(300, self.refresh_list)
+
     def recalcular_form(self, manual_override: bool = False) -> None:
         """
         Realiza cálculos en tiempo real en memoria usando el modelo de dominio.
-        Actualiza los indicadores sin disparar molestas alertas mientras el usuario escribe.
+        Actualiza los indicadores sin disparar alertas molestas mientras el usuario escribe.
         """
         nombre = self.entry_nombre.get().strip()
         costo_total_raw = self.entry_costo_total.get().strip()
@@ -432,22 +511,22 @@ class KostoApp(ctk.CTk):
             return
 
         try:
-            # Limpieza básica para permitir comas como punto decimal
-            costo_total = float(costo_total_raw.replace(",", "."))
+            # Limpieza y validación básica de tipos usando Decimal
+            costo_total = Decimal(costo_total_raw.replace(",", "."))
             unidades = int(unidades_raw)
 
-            if costo_total <= 0 or unidades <= 0:
+            if costo_total <= Decimal("0") or unidades <= 0:
                 raise ValueError()
-        except ValueError:
+        except (ValueError, InvalidOperation):
             # Inputs inválidos pero el usuario podría estar a mitad de escribir
             self.lbl_costo_unitario_val.configure(
-                text="Invalido", text_color=self.COLOR_INDICADOR_ERROR
+                text="Inválido", text_color=self.COLOR_INDICADOR_ERROR
             )
             self.lbl_precio_sugerido_val.configure(
-                text="Invalido", text_color=self.COLOR_INDICADOR_ERROR
+                text="Inválido", text_color=self.COLOR_INDICADOR_ERROR
             )
             self.lbl_ganancia_val.configure(
-                text="Invalido", text_color=self.COLOR_INDICADOR_ERROR
+                text="Inválido", text_color=self.COLOR_INDICADOR_ERROR
             )
             return
 
@@ -457,12 +536,11 @@ class KostoApp(ctk.CTk):
 
         try:
             # Instanciar modelo de dominio en memoria
-            # Si el precio manual no ha sido tocado por el usuario o está vacío, dejamos que calcule el sugerido
             p_manual = None
             if precio_manual_raw:
                 try:
-                    p_manual = float(precio_manual_raw.replace(",", "."))
-                except ValueError:
+                    p_manual = Decimal(precio_manual_raw.replace(",", "."))
+                except InvalidOperation:
                     pass
 
             prod_temp = Producto(
@@ -475,7 +553,6 @@ class KostoApp(ctk.CTk):
             # Si el cálculo actualiza el precio sugerido y el usuario no especificó un precio manual,
             # o si NO estamos haciendo override manual del precio, pre-llenar de forma amigable
             if not manual_override and not precio_manual_raw:
-                # No reescribir si ya hay un valor ingresado a menos que sea igual al anterior sugerido
                 self.entry_precio_manual.delete(0, tk.END)
                 self.entry_precio_manual.insert(0, f"{prod_temp.precio_sugerido:.2f}")
                 prod_temp.update_precio_manual(prod_temp.precio_sugerido)
@@ -490,7 +567,7 @@ class KostoApp(ctk.CTk):
             self.lbl_ganancia_val.configure(text=f"${prod_temp.ganancia_neta:.4f}")
 
             # Dar color al indicador de ganancia
-            if prod_temp.ganancia_neta >= 0:
+            if prod_temp.ganancia_neta >= Decimal("0"):
                 self.lbl_ganancia_val.configure(text_color=self.COLOR_INDICADOR_EXITO)
             else:
                 self.lbl_ganancia_val.configure(text_color=self.COLOR_INDICADOR_ERROR)
@@ -516,8 +593,8 @@ class KostoApp(ctk.CTk):
             return
 
         try:
-            costo_total = float(costo_total_raw.replace(",", "."))
-        except ValueError:
+            costo_total = Decimal(costo_total_raw.replace(",", "."))
+        except InvalidOperation:
             self.show_status(
                 "El costo del paquete debe ser un número decimal.", es_error=True
             )
@@ -534,8 +611,8 @@ class KostoApp(ctk.CTk):
         precio_manual = None
         if precio_manual_raw:
             try:
-                precio_manual = float(precio_manual_raw.replace(",", "."))
-            except ValueError:
+                precio_manual = Decimal(precio_manual_raw.replace(",", "."))
+            except InvalidOperation:
                 self.show_status(
                     "El precio de venta manual debe ser un número válido.",
                     es_error=True,
@@ -583,7 +660,7 @@ class KostoApp(ctk.CTk):
     def refresh_list(self) -> None:
         """
         Actualiza los registros que se muestran en el scroll_table,
-        aplicando filtros de búsqueda en tiempo real si existen de manera segura.
+        aplicando filtros de búsqueda en tiempo real de manera segura.
         """
         # Limpiar widgets actuales en la tabla scrollable
         for widget in self.scroll_table.winfo_children():
@@ -616,7 +693,6 @@ class KostoApp(ctk.CTk):
 
         # Agregar los productos a la vista como filas perfectamente alineadas
         for idx, prod in enumerate(productos):
-            # Frame contenedor para la fila
             # Color alternado sutil para mejorar la legibilidad visual de la tabla
             bg_fila = self.COLOR_BG_SECUNDARIO if idx % 2 == 0 else "#212130"
 
@@ -692,7 +768,7 @@ class KostoApp(ctk.CTk):
             # Columna 6: Ganancia neta (4 decimales)
             color_ganancia = (
                 self.COLOR_INDICADOR_EXITO
-                if prod.ganancia_neta >= 0
+                if prod.ganancia_neta >= Decimal("0")
                 else self.COLOR_INDICADOR_ERROR
             )
             lbl_gan = ctk.CTkLabel(
@@ -745,13 +821,13 @@ class KostoApp(ctk.CTk):
         self.entry_nombre.insert(0, producto.nombre)
 
         self.entry_costo_total.delete(0, tk.END)
-        self.entry_costo_total.insert(0, str(producto.costo_total))
+        self.entry_costo_total.insert(0, f"{producto.costo_total:.2f}")
 
         self.entry_unidades.delete(0, tk.END)
         self.entry_unidades.insert(0, str(producto.unidades_por_paquete))
 
         self.entry_precio_manual.delete(0, tk.END)
-        self.entry_precio_manual.insert(0, str(producto.precio_manual))
+        self.entry_precio_manual.insert(0, f"{producto.precio_manual:.2f}")
 
         # Cambiar apariencia del título del formulario y botones
         self.lbl_form_title.configure(
@@ -772,18 +848,18 @@ class KostoApp(ctk.CTk):
 
     def confirmar_eliminar(self, producto: Producto) -> None:
         """
-        Muestra un cuadro de diálogo para confirmar la eliminación de un producto de forma segura.
+        Muestra un cuadro de diálogo personalizado para confirmar la eliminación de un producto de forma segura.
         """
         if producto.id is None:
             return
 
-        respuesta = messagebox.askyesno(
+        dialog = CustomConfirmDialog(
+            self,
             title="Confirmar eliminación",
             message=f"¿Está seguro de que desea eliminar el producto '{producto.nombre}'?\nEsta acción no se puede deshacer.",
-            parent=self,
         )
 
-        if respuesta:
+        if dialog.result:
             try:
                 self.db.eliminar_producto(producto.id)
                 self.show_status(

@@ -20,56 +20,59 @@ class DatabaseManager:
     def __init__(self, db_path: str = "kosto.db"):
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # Usar sqlite3.Row para acceder a columnas de forma segura por su nombre
+        self.conn.row_factory = sqlite3.Row
         self.inicializar_db()
 
     def inicializar_db(self) -> None:
         """
         Crea la tabla 'productos' si no existe en la base de datos.
         """
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS productos (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                nombre TEXT NOT NULL,
-                costo_total REAL NOT NULL,
-                unidades_por_paquete INTEGER NOT NULL,
-                costo_unitario_real REAL NOT NULL,
-                precio_sugerido REAL NOT NULL,
-                precio_manual REAL NOT NULL,
-                ganancia_neta REAL NOT NULL
-            )
-        """)
-        self.conn.commit()
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute("""
+                CREATE TABLE IF NOT EXISTS productos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    nombre TEXT NOT NULL,
+                    costo_total REAL NOT NULL,
+                    unidades_por_paquete INTEGER NOT NULL,
+                    costo_unitario_real REAL NOT NULL,
+                    precio_sugerido REAL NOT NULL,
+                    precio_manual REAL NOT NULL,
+                    ganancia_neta REAL NOT NULL
+                )
+            """)
 
     def insertar_producto(self, producto: Producto) -> Producto:
         """
         Inserta un nuevo producto en la base de datos y le asigna el ID autogenerado.
+        Garantiza que los campos de tipo Decimal de Python se conviertan a float para SQLite.
         """
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            INSERT INTO productos (
-                nombre,
-                costo_total,
-                unidades_por_paquete,
-                costo_unitario_real,
-                precio_sugerido,
-                precio_manual,
-                ganancia_neta
-            ) VALUES (?, ?, ?, ?, ?, ?, ?)
-        """,
-            (
-                producto.nombre,
-                producto.costo_total,
-                producto.unidades_por_paquete,
-                producto.costo_unitario_real,
-                producto.precio_sugerido,
-                producto.precio_manual,
-                producto.ganancia_neta,
-            ),
-        )
-        self.conn.commit()
-        producto.id = cursor.lastrowid
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO productos (
+                    nombre,
+                    costo_total,
+                    unidades_por_paquete,
+                    costo_unitario_real,
+                    precio_sugerido,
+                    precio_manual,
+                    ganancia_neta
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+                (
+                    producto.nombre,
+                    float(producto.costo_total),
+                    producto.unidades_por_paquete,
+                    float(producto.costo_unitario_real),
+                    float(producto.precio_sugerido),
+                    float(producto.precio_manual),
+                    float(producto.ganancia_neta),
+                ),
+            )
+            producto.id = cursor.lastrowid
         return producto
 
     def actualizar_producto(self, producto: Producto) -> None:
@@ -79,31 +82,31 @@ class DatabaseManager:
         if producto.id is None:
             raise ValueError("No se puede actualizar un producto sin un ID válido.")
 
-        cursor = self.conn.cursor()
-        cursor.execute(
-            """
-            UPDATE productos
-            SET nombre = ?,
-                costo_total = ?,
-                unidades_por_paquete = ?,
-                costo_unitario_real = ?,
-                precio_sugerido = ?,
-                precio_manual = ?,
-                ganancia_neta = ?
-            WHERE id = ?
-        """,
-            (
-                producto.nombre,
-                producto.costo_total,
-                producto.unidades_por_paquete,
-                producto.costo_unitario_real,
-                producto.precio_sugerido,
-                producto.precio_manual,
-                producto.ganancia_neta,
-                producto.id,
-            ),
-        )
-        self.conn.commit()
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                """
+                UPDATE productos
+                SET nombre = ?,
+                    costo_total = ?,
+                    unidades_por_paquete = ?,
+                    costo_unitario_real = ?,
+                    precio_sugerido = ?,
+                    precio_manual = ?,
+                    ganancia_neta = ?
+                WHERE id = ?
+            """,
+                (
+                    producto.nombre,
+                    float(producto.costo_total),
+                    producto.unidades_por_paquete,
+                    float(producto.costo_unitario_real),
+                    float(producto.precio_sugerido),
+                    float(producto.precio_manual),
+                    float(producto.ganancia_neta),
+                    producto.id,
+                ),
+            )
 
     def obtener_productos(self, busqueda: Optional[str] = None) -> List[Producto]:
         """
@@ -135,11 +138,11 @@ class DatabaseManager:
             # Al instanciar, __post_init__ recalcula automáticamente los campos derivados.
             # Pasamos precio_manual de la DB para preservar la sobreescritura del usuario.
             prod = Producto(
-                id=row[0],
-                nombre=row[1],
-                costo_total=row[2],
-                unidades_por_paquete=row[3],
-                precio_manual=row[4],
+                id=row["id"],
+                nombre=row["nombre"],
+                costo_total=row["costo_total"],
+                unidades_por_paquete=row["unidades_por_paquete"],
+                precio_manual=row["precio_manual"],
             )
             productos.append(prod)
         return productos
@@ -148,9 +151,9 @@ class DatabaseManager:
         """
         Elimina de manera segura un producto por su ID.
         """
-        cursor = self.conn.cursor()
-        cursor.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
-        self.conn.commit()
+        with self.conn:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
 
     def cerrar_conexion(self) -> None:
         """
