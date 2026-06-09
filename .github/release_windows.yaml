@@ -24,13 +24,12 @@ jobs:
 
       - name: 3. Sincronizar Entorno Seguro
         run: |
-          uv venv --python 3.12
           uv sync
 
       - name: 4. Compilar Binario Inmutable (.exe)
         run: |
-          # Compilamos el binario aislando los assets de customtkinter
-          uv run pyinstaller --onefile --windowed --name kosto --collect-all customtkinter src/main.py
+          # Compilamos usando --collect-all para asegurar que los temas/assets de customtkinter viajen dentro del ejecutable
+          uv run pyinstaller --onefile --windowed --name kosto --collect-all customtkinter main.py
 
       - name: 5. Preparar Paquete de Distribución
         shell: bash
