@@ -16,11 +16,11 @@
 infrastructure/database.py
 
 Este módulo maneja la persistencia de datos en SQLite3.
-Implementa operaciones CRUD seguras usando consultas parametrizadas para evitar inyecciones SQL.
+Implementa operaciones CRUD seguras usando consultas
+parametrizadas para evitar inyecciones SQL.
 """
 
 import sqlite3
-from typing import List, Optional
 
 from domain.models import Producto
 
@@ -60,7 +60,8 @@ class DatabaseManager:
     def insertar_producto(self, producto: Producto) -> Producto:
         """
         Inserta un nuevo producto en la base de datos y le asigna el ID autogenerado.
-        Garantiza que los campos de tipo Decimal de Python se conviertan a float para SQLite.
+        Garantiza que los campos de tipo Decimal de Python se conviertan
+        a float para SQLite.
         """
         with self.conn:
             cursor = self.conn.cursor()
@@ -82,11 +83,19 @@ class DatabaseManager:
                     producto.unidades_por_paquete,
                     float(producto.costo_unitario_real),
                     float(producto.precio_sugerido),
-                    float(producto.precio_manual),
+                    float(producto.precio_manual)
+                    if producto.precio_manual is not None
+                    else None,
                     float(producto.ganancia_neta),
                 ),
             )
-            producto.id = cursor.lastrowid
+            row_id = cursor.lastrowid
+
+            if row_id is None:
+                raise OSError("No se pudo obtener el ID autogenerado.")
+
+            producto.id = row_id
+
         return producto
 
     def actualizar_producto(self, producto: Producto) -> None:
@@ -116,16 +125,21 @@ class DatabaseManager:
                     producto.unidades_por_paquete,
                     float(producto.costo_unitario_real),
                     float(producto.precio_sugerido),
-                    float(producto.precio_manual),
+                    float(
+                        producto.precio_manual
+                        if producto.precio_manual is not None
+                        else producto.precio_sugerido
+                    ),
                     float(producto.ganancia_neta),
                     producto.id,
                 ),
             )
 
-    def obtener_productos(self, busqueda: Optional[str] = None) -> List[Producto]:
+    def obtener_productos(self, busqueda: str | None = None) -> list[Producto]:
         """
         Obtiene la lista de todos los productos.
-        Si se pasa el parámetro 'busqueda', filtra por el nombre del producto de forma segura.
+        Si se pasa el parámetro 'busqueda',
+        filtra por el nombre del producto de forma segura.
         """
         cursor = self.conn.cursor()
         if busqueda and busqueda.strip():
@@ -149,8 +163,10 @@ class DatabaseManager:
 
         productos = []
         for row in rows:
-            # Al instanciar, __post_init__ recalcula automáticamente los campos derivados.
-            # Pasamos precio_manual de la DB para preservar la sobreescritura del usuario.
+            # Al instanciar, __post_init__ recalcula automáticamente
+            # los campos derivados.
+            # Pasamos precio_manual de la DB para preservar
+            # la sobreescritura del usuario.
             prod = Producto(
                 id=row["id"],
                 nombre=row["nombre"],

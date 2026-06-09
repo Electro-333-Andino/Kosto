@@ -16,12 +16,11 @@
 test_kosto.py
 
 Suite de pruebas unitarias para Kosto.
-Verifica la lógica de negocio (dominio) y las operaciones de persistencia (infraestructura SQLite3).
+Verifica la lógica de negocio (dominio) y las operaciones
+de persistencia (infraestructura SQLite3).
 Utiliza 'unittest' de la librería estándar de Python.
 """
 
-import os
-import sqlite3
 import unittest
 from decimal import Decimal
 
@@ -42,9 +41,9 @@ class TestProductoDomain(unittest.TestCase):
         """
         p = Producto(
             nombre="Aceite de Oliva",
-            costo_total=3.67,
+            costo_total=Decimal("3.67"),
             unidades_por_paquete=12,
-            precio_manual=0.35,
+            precio_manual=Decimal("0.35"),
         )
         # 3.67 / 12 = 0.305833... -> redondeado a 4 decimales: 0.3058
         self.assertEqual(p.costo_unitario_real, Decimal("0.3058"))
@@ -55,11 +54,14 @@ class TestProductoDomain(unittest.TestCase):
 
     def test_precio_manual_por_defecto_sugerido(self) -> None:
         """
-        Verifica que si no se proporciona un precio manual, este tome el valor del precio sugerido,
+        Verifica que si no se proporciona un precio manual,
+        este tome el valor del precio sugerido,
         y calcule la ganancia correspondiente.
         """
         p = Producto(
-            nombre="Harina de Trigo", costo_total=10.00, unidades_por_paquete=10
+            nombre="Harina de Trigo",
+            costo_total=Decimal("10.00"),
+            unidades_por_paquete=10,
         )
         self.assertEqual(p.costo_unitario_real, Decimal("1.0000"))
         self.assertEqual(p.precio_sugerido, Decimal("1.00"))
@@ -68,15 +70,21 @@ class TestProductoDomain(unittest.TestCase):
 
     def test_actualizar_precio_manual_exito(self) -> None:
         """
-        Verifica que al actualizar el precio manual, la ganancia neta se recalcule de forma correcta.
+        Verifica que al actualizar el precio manual,
+        la ganancia neta se recalcule de forma correcta.
         """
         p = Producto(
-            nombre="Salsa de Tomate", costo_total=5.00, unidades_por_paquete=10
+            nombre="Salsa de Tomate",
+            costo_total=Decimal("5.00"),
+            unidades_por_paquete=10,
         )
-        # Costo real = 0.50, Sugerido = 0.50, Manual Inicial = 0.50, Ganancia Inicial = 0.00
-        p.update_precio_manual(0.75)
+        # Costo real = 0.50, Sugerido = 0.50, Manual Inicial = 0.50,
+        # Ganancia Inicial = 0.00
+        p.update_precio_manual(Decimal("0.75"))
+
         self.assertEqual(p.precio_manual, Decimal("0.75"))
         # Ganancia: 0.75 - 0.50 = 0.25
+
         self.assertEqual(p.ganancia_neta, Decimal("0.25"))
 
     def test_validaciones_valores_invalidos(self) -> None:
@@ -85,42 +93,53 @@ class TestProductoDomain(unittest.TestCase):
         """
         # Nombre vacío
         with self.assertRaises(ValueError):
-            Producto(nombre="", costo_total=10.00, unidades_por_paquete=10)
+            Producto(nombre="", costo_total=Decimal("10.00"), unidades_por_paquete=10)
 
         # Costo total <= 0
         with self.assertRaises(ValueError):
-            Producto(nombre="Arroz", costo_total=0.0, unidades_por_paquete=10)
+            Producto(
+                nombre="Arroz", costo_total=Decimal("0.0"), unidades_por_paquete=10
+            )
         with self.assertRaises(ValueError):
-            Producto(nombre="Arroz", costo_total=-1.5, unidades_por_paquete=10)
+            Producto(
+                nombre="Arroz", costo_total=Decimal("-1.5"), unidades_por_paquete=10
+            )
 
         # Unidades por paquete <= 0
         with self.assertRaises(ValueError):
-            Producto(nombre="Fideos", costo_total=5.0, unidades_por_paquete=0)
+            Producto(
+                nombre="Fideos", costo_total=Decimal("5.0"), unidades_por_paquete=0
+            )
         with self.assertRaises(ValueError):
-            Producto(nombre="Fideos", costo_total=5.0, unidades_por_paquete=-5)
+            Producto(
+                nombre="Fideos", costo_total=Decimal("5.0"), unidades_por_paquete=-5
+            )
 
         # Precio manual negativo
         with self.assertRaises(ValueError):
             Producto(
                 nombre="Fideos",
-                costo_total=5.0,
+                costo_total=Decimal("5.0"),
                 unidades_por_paquete=5,
-                precio_manual=-0.5,
+                precio_manual=Decimal("-0.5"),
             )
 
     def test_actualizar_precio_manual_invalido(self) -> None:
         """
         Verifica que no se permita establecer un precio manual negativo.
         """
-        p = Producto(nombre="Leche", costo_total=4.50, unidades_por_paquete=5)
+        p = Producto(
+            nombre="Leche", costo_total=Decimal("4.50"), unidades_por_paquete=5
+        )
         with self.assertRaises(ValueError):
-            p.update_precio_manual(-0.1)
+            p.update_precio_manual(Decimal("-0.1"))
 
 
 class TestDatabaseManager(unittest.TestCase):
     """
     Pruebas de integración para el Administrador de Base de Datos.
-    Utiliza una base de datos SQLite3 en memoria para garantizar aislamiento e idoneidad.
+    Utiliza una base de datos SQLite3 en memoria
+    para garantizar aislamiento e idoneidad.
     """
 
     def setUp(self) -> None:
@@ -148,9 +167,9 @@ class TestDatabaseManager(unittest.TestCase):
         """
         p = Producto(
             nombre="Azúcar 1kg",
-            costo_total=12.50,
+            costo_total=Decimal("12.50"),
             unidades_por_paquete=10,
-            precio_manual=1.50,
+            precio_manual=Decimal("1.50"),
         )
         self.assertIsNone(p.id)
 
@@ -179,15 +198,16 @@ class TestDatabaseManager(unittest.TestCase):
         """
         Verifica la actualización correcta de campos en la base de datos.
         """
-        p = Producto(nombre="Café Soluble", costo_total=8.00, unidades_por_paquete=4)
+        p = Producto(
+            nombre="Café Soluble", costo_total=Decimal("8.00"), unidades_por_paquete=4
+        )
         p_guardado = self.db.insertar_producto(p)
 
         # Modificar producto
         p_guardado.nombre = "Café Soluble Premium"
-        p_guardado.update_precio_manual(
-            3.00
-        )  # Costo unitario real = 2.00, ganancia = 1.00
 
+        # Costo unitario real = 2.00, ganancia = 1.00
+        p_guardado.update_precio_manual(Decimal("3.00"))
         self.db.actualizar_producto(p_guardado)
 
         # Recuperar y verificar
@@ -200,12 +220,19 @@ class TestDatabaseManager(unittest.TestCase):
 
     def test_obtener_productos_con_filtro_busqueda(self) -> None:
         """
-        Verifica que el buscador filtre productos correctamente por coincidencia parcial y segura (LIKE).
+        Verifica que el buscador filtre productos correctamente
+        por coincidencia parcial y segura (LIKE).
         """
-        p1 = Producto(nombre="Manzana Roja", costo_total=5.00, unidades_por_paquete=5)
-        p2 = Producto(nombre="Manzana Verde", costo_total=6.00, unidades_por_paquete=5)
+        p1 = Producto(
+            nombre="Manzana Roja", costo_total=Decimal("5.00"), unidades_por_paquete=5
+        )
+        p2 = Producto(
+            nombre="Manzana Verde", costo_total=Decimal("6.00"), unidades_por_paquete=5
+        )
         p3 = Producto(
-            nombre="Plátano Tabasco", costo_total=3.00, unidades_por_paquete=6
+            nombre="Plátano Tabasco",
+            costo_total=Decimal("3.00"),
+            unidades_por_paquete=6,
         )
 
         self.db.insertar_producto(p1)
@@ -232,12 +259,16 @@ class TestDatabaseManager(unittest.TestCase):
         """
         Verifica la eliminación correcta de un registro.
         """
-        p = Producto(nombre="Yogur Griego", costo_total=4.00, unidades_por_paquete=4)
+        p = Producto(
+            nombre="Yogur Griego", costo_total=Decimal("4.00"), unidades_por_paquete=4
+        )
         p_guardado = self.db.insertar_producto(p)
         self.assertEqual(len(self.db.obtener_productos()), 1)
 
         # Eliminar
+        assert p_guardado.id is not None
         self.db.eliminar_producto(p_guardado.id)
+
         self.assertEqual(len(self.db.obtener_productos()), 0)
 
 

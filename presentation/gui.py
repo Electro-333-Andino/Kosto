@@ -3,12 +3,12 @@ presentation/gui.py
 
 Este módulo implementa la interfaz gráfica de usuario (GUI) utilizando CustomTkinter.
 Sigue estrictamente la paleta de colores de Catppuccin Mocha y una arquitectura limpia.
-No contiene lógica de negocios ni de acceso a datos directa, sino que delega en el Dominio y el DatabaseManager.
+No contiene lógica de negocios ni de acceso a datos directa,
+sino que delega en el Dominio y el DatabaseManager.
 """
 
 import tkinter as tk
 from decimal import Decimal, InvalidOperation
-from typing import Optional
 
 import customtkinter as ctk
 
@@ -19,7 +19,8 @@ from infrastructure.database import DatabaseManager
 class CustomConfirmDialog(ctk.CTkToplevel):
     """
     Cuadro de diálogo de confirmación personalizado y modal.
-    Adopta completamente el tema oscuro y los colores de la paleta Catppuccin Mocha del padre.
+    Adopta completamente el tema oscuro y los colores
+    de la paleta Catppuccin Mocha del padre.
     """
 
     def __init__(self, parent: "KostoApp", title: str, message: str):
@@ -103,8 +104,8 @@ class KostoApp(ctk.CTk):
         self.db = db
 
         # Guardar estado de edición e hilos de temporizador (search debounce)
-        self.producto_seleccionado_id: Optional[int] = None
-        self._search_timer_id: Optional[str] = None
+        self.producto_seleccionado_id: int | None = None
+        self._search_timer_id: str | None = None
 
         # Configuración básica de la ventana
         self.title("KOSTO - Control de Inventario y Márgenes")
@@ -133,7 +134,8 @@ class KostoApp(ctk.CTk):
 
     def setup_layout(self) -> None:
         """
-        Divide la interfaz en dos paneles principales: izquierdo (formulario) y derecho (tabla).
+        Divide la interfaz en dos paneles principales:
+            izquierdo (formulario) y derecho (tabla).
         """
         # Configurar grid principal (1 fila, 2 columnas)
         self.grid_rowconfigure(0, weight=1)
@@ -380,7 +382,8 @@ class KostoApp(ctk.CTk):
 
     def setup_tabla(self) -> None:
         """
-        Crea el buscador y la estructura de la tabla de visualización en el panel derecho.
+        Crea el buscador y la estructura de la tabla
+        de visualización en el panel derecho.
         """
         self.frame_tabla.grid_columnconfigure(0, weight=1)
         self.frame_tabla.grid_rowconfigure(2, weight=1)
@@ -400,14 +403,17 @@ class KostoApp(ctk.CTk):
 
         self.entry_buscar = ctk.CTkEntry(
             self.frame_buscador,
-            placeholder_text="Escribe el nombre de un producto para filtrar en tiempo real...",
+            placeholder_text=(
+                "Escribe el nombre de un producto para filtrar en tiempo real..."
+            ),
             fg_color=self.COLOR_BG_SECUNDARIO,
             text_color=self.COLOR_TEXTO_PRINCIPAL,
             border_color=self.COLOR_BORDE,
             height=35,
         )
         self.entry_buscar.grid(row=0, column=1, sticky="ew")
-        # Enlazar la búsqueda al mecanismo de anti-rebote (debounce) para optimizar rendimiento
+        # Enlazar la búsqueda al mecanismo de anti-rebote (debounce)
+        # para optimizar rendimiento
         self.entry_buscar.bind("<KeyRelease>", self.al_escribir_busqueda)
 
         self.btn_limpiar_buscar = ctk.CTkButton(
@@ -491,7 +497,8 @@ class KostoApp(ctk.CTk):
     def recalcular_form(self, manual_override: bool = False) -> None:
         """
         Realiza cálculos en tiempo real en memoria usando el modelo de dominio.
-        Actualiza los indicadores sin disparar alertas molestas mientras el usuario escribe.
+        Actualiza los indicadores sin disparar alertas molestas
+        mientras el usuario escribe.
         """
         nombre = self.entry_nombre.get().strip()
         costo_total_raw = self.entry_costo_total.get().strip()
@@ -550,8 +557,10 @@ class KostoApp(ctk.CTk):
                 precio_manual=p_manual,
             )
 
-            # Si el cálculo actualiza el precio sugerido y el usuario no especificó un precio manual,
-            # o si NO estamos haciendo override manual del precio, pre-llenar de forma amigable
+            # Si el cálculo actualiza el precio sugerido y el usuario
+            # no especificó un precio manual,
+            # o si NO estamos haciendo override manual del precio,
+            # pre-llenar de forma amigable
             if not manual_override and not precio_manual_raw:
                 self.entry_precio_manual.delete(0, tk.END)
                 self.entry_precio_manual.insert(0, f"{prod_temp.precio_sugerido:.2f}")
@@ -572,7 +581,7 @@ class KostoApp(ctk.CTk):
             else:
                 self.lbl_ganancia_val.configure(text_color=self.COLOR_INDICADOR_ERROR)
 
-        except ValueError as err:
+        except ValueError:
             # Manejar errores de dominio de forma elegante
             self.lbl_ganancia_val.configure(
                 text="Error Calc.", text_color=self.COLOR_INDICADOR_ERROR
@@ -580,7 +589,8 @@ class KostoApp(ctk.CTk):
 
     def guardar_producto(self) -> None:
         """
-        Valida rigurosamente los campos del formulario y persiste el producto (nuevo o actualizado).
+        Valida rigurosamente los campos del formulario y persiste
+        el producto (nuevo o actualizado).
         """
         nombre = self.entry_nombre.get().strip()
         costo_total_raw = self.entry_costo_total.get().strip()
@@ -812,7 +822,8 @@ class KostoApp(ctk.CTk):
 
     def cargar_producto_edicion(self, producto: Producto) -> None:
         """
-        Carga los datos de un producto seleccionado en el formulario y cambia el modo a 'Edición'.
+        Carga los datos de un producto seleccionado en el formulario
+        y cambia el modo a 'Edición'.
         """
         self.producto_seleccionado_id = producto.id
 
@@ -842,13 +853,17 @@ class KostoApp(ctk.CTk):
         # Forzar recalcular para refrescar los labels calculados en tiempo real
         self.recalcular_form(manual_override=True)
         self.show_status(
-            "Producto cargado para edición. Modifica los campos y haz clic en 'Guardar Cambios'.",
+            (
+                "Producto cargado para edición. Modifica los campos "
+                "y haz clic en 'Guardar Cambios'."
+            ),
             es_error=False,
         )
 
     def confirmar_eliminar(self, producto: Producto) -> None:
         """
-        Muestra un cuadro de diálogo personalizado para confirmar la eliminación de un producto de forma segura.
+        Muestra un cuadro de diálogo personalizado para confirmar la
+        eliminación de un producto de forma segura.
         """
         if producto.id is None:
             return
@@ -856,7 +871,10 @@ class KostoApp(ctk.CTk):
         dialog = CustomConfirmDialog(
             self,
             title="Confirmar eliminación",
-            message=f"¿Está seguro de que desea eliminar el producto '{producto.nombre}'?\nEsta acción no se puede deshacer.",
+            message=(
+                f"¿Está seguro de que desea eliminar el producto '{producto.nombre}'?\n"
+                "Esta acción no se puede deshacer."
+            ),
         )
 
         if dialog.result:
@@ -866,7 +884,8 @@ class KostoApp(ctk.CTk):
                     f"Producto '{producto.nombre}' eliminado con éxito.", es_error=False
                 )
 
-                # Si el producto eliminado era el que se estaba editando, limpiar el form
+                # Si el producto eliminado era el que se estaba
+                # editando, limpiar el form
                 if self.producto_seleccionado_id == producto.id:
                     self.limpiar_formulario()
 
@@ -914,7 +933,8 @@ class KostoApp(ctk.CTk):
 
     def show_status(self, message: str, es_error: bool = False) -> None:
         """
-        Muestra mensajes informativos o de error en la parte inferior del formulario con colores temáticos.
+        Muestra mensajes informativos o de error en la parte inferior
+        del formulario con colores temáticos.
         """
         color = self.COLOR_INDICADOR_ERROR if es_error else self.COLOR_INDICADOR_EXITO
         self.lbl_status.configure(text=message, text_color=color)

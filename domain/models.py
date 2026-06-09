@@ -16,22 +16,22 @@
 domain/models.py
 
 Este módulo contiene el modelo de dominio de Kosto.
-Define la entidad core de Producto y maneja todos los cálculos matemáticos y comerciales.
+Define la entidad core de Producto y maneja todos los cálculos
+matemáticos y comerciales.
 Está completamente desacoplado de bases de datos y de la interfaz de usuario.
 """
 
 from dataclasses import dataclass, field
 from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
-from typing import Optional, Union
 
 
 @dataclass
 class Producto:
     nombre: str
-    costo_total: Union[Decimal, float, str]
+    costo_total: Decimal
     unidades_por_paquete: int
-    precio_manual: Optional[Union[Decimal, float, str]] = None
-    id: Optional[int] = None
+    precio_manual: Decimal | None = None
+    id: int | None = None
 
     # Campos calculados automáticamente usando precisión de Decimal
     costo_unitario_real: Decimal = field(init=False)
@@ -51,18 +51,18 @@ class Producto:
         # Conversión y validación de costo total
         try:
             if isinstance(self.costo_total, str):
-                self.costo_total = self.costo_total.replace(",", ".")
+                self.costo_total = Decimal(str(self.costo_total.replace(",", ".")))
             self.costo_total = Decimal(str(self.costo_total))
-        except (ValueError, TypeError, InvalidOperation):
-            raise ValueError("El costo total debe ser un número válido.")
+        except (ValueError, TypeError, InvalidOperation) as err:
+            raise ValueError("El costo total debe ser un número válido.") from err
 
         # Conversión y validación de unidades por paquete
         try:
             self.unidades_por_paquete = int(self.unidades_por_paquete)
-        except (ValueError, TypeError):
+        except (ValueError, TypeError) as err:
             raise ValueError(
                 "Las unidades por paquete deben ser un número entero válido."
-            )
+            ) from err
 
         if self.costo_total <= Decimal("0"):
             raise ValueError("El costo total debe ser mayor que cero.")
@@ -87,17 +87,19 @@ class Producto:
         else:
             try:
                 if isinstance(self.precio_manual, str):
-                    self.precio_manual = self.precio_manual.replace(",", ".")
+                    self.precio_manual = Decimal(
+                        str(self.precio_manual.replace(",", "."))
+                    )
                 self.precio_manual = Decimal(str(self.precio_manual))
-            except (ValueError, TypeError, InvalidOperation):
-                raise ValueError("El precio manual debe ser un número válido.")
+            except (ValueError, TypeError, InvalidOperation) as err:
+                raise ValueError("El precio manual debe ser un número válido.") from err
             if self.precio_manual < Decimal("0"):
                 raise ValueError("El precio manual no puede ser negativo.")
 
         # Cálculo final: Ganancia neta (Precio manual - Costo unitario real)
         self.recalculate_ganancia()
 
-    def update_precio_manual(self, nuevo_precio: Union[Decimal, float, str]) -> None:
+    def update_precio_manual(self, nuevo_precio: Decimal | float | str) -> None:
         """
         Permite actualizar el precio manual de venta y recalcula la ganancia neta.
         """
@@ -105,8 +107,8 @@ class Producto:
             if isinstance(nuevo_precio, str):
                 nuevo_precio = nuevo_precio.replace(",", ".")
             nuevo_precio = Decimal(str(nuevo_precio))
-        except (ValueError, TypeError, InvalidOperation):
-            raise ValueError("El precio manual debe ser un número válido.")
+        except (ValueError, TypeError, InvalidOperation) as err:
+            raise ValueError("El precio manual debe ser un número válido.") from err
 
         if nuevo_precio < Decimal("0"):
             raise ValueError("El precio manual no puede ser negativo.")
