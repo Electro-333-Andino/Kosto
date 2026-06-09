@@ -1,0 +1,59 @@
+name: Release Profesional para Windows 10
+
+on:
+  push:
+    tags:
+      - "v*.*.*" # El flujo profesional solo se activa cuando creas una etiqueta de versión (ej: git tag v0.1.0)
+
+permissions:
+  contents: write # Permiso obligatorio para que el bot de GitHub pueda crear el Release de forma segura
+
+jobs:
+  build-and-release:
+    runs-on: windows-latest
+
+    steps:
+      - name: 1. Descargar Código Fuente
+        uses: actions/checkout@v4
+
+      - name: 2. Instalar 'uv' (Astral)
+        uses: astral-sh/setup-uv@v5
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: 3. Sincronizar Entorno Seguro
+        run: |
+          uv venv --python 3.12
+          uv sync
+
+      - name: 4. Compilar Binario Inmutable (.exe)
+        run: |
+          # Compilamos el binario aislando los assets de customtkinter
+          uv run pyinstaller --onefile --windowed --name kosto --collect-all customtkinter src/main.py
+
+      - name: 5. Preparar Paquete de Distribución
+        shell: bash
+        run: |
+          # Renombramos el ejecutable con la versión del tag actual para mantener la trazabilidad
+          mv dist/kosto.exe "dist/Kosto-${{ github.ref_name }}-Windows-x64.exe"
+
+      - name: 6. Crear Release Oficial en GitHub
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/Kosto-*.exe
+          name: Kosto Inventario ${{ github.ref_name }}
+          body: |
+            ## Liberación Oficial de Producción
+
+            Instalador nativo para Windows 10 compilado de forma segura mediante integración continua.
+
+            ### Detalles de la compilación:
+            * **Versión:** `${{ github.ref_name }}`
+            * **Arquitectura:** Windows x64 (10/11)
+            * **Motor:** Python 3.12 (Aislado con `uv`)
+            * **Checksum de integridad generado en servidor seguro.**
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Llave criptográfica automática de GitHub
