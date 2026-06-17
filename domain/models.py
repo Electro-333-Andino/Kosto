@@ -16,8 +16,8 @@
 domain/models.py
 
 Este módulo contiene el modelo de dominio de Kosto.
-Define la entidad core de Producto y maneja todos los cálculos
-matemáticos y comerciales.
+Define la entidad core de Producto, DetalleVenta, Venta y LogAuditoria,
+y maneja todos los cálculos matemáticos y comerciales.
 Está completamente desacoplado de bases de datos y de la interfaz de usuario.
 """
 
@@ -32,6 +32,7 @@ class Producto:
     unidades_por_paquete: int
     precio_manual: Decimal | None = None
     id: int | None = None
+    stock: int = 0
 
     # Campos calculados automáticamente usando precisión de Decimal
     costo_unitario_real: Decimal = field(init=False)
@@ -69,6 +70,15 @@ class Producto:
 
         if self.unidades_por_paquete <= 0:
             raise ValueError("Las unidades por paquete deben ser mayores que cero.")
+
+        # Conversión y validación de stock
+        try:
+            self.stock = int(self.stock)
+        except (ValueError, TypeError) as err:
+            raise ValueError("El stock debe ser un número entero válido.") from err
+
+        if self.stock < 0:
+            raise ValueError("El stock no puede ser negativo.")
 
         # Costo unitario real (ej. 3.67 / 12 = 0.3058)
         costo_crudo = self.costo_total / Decimal(self.unidades_por_paquete)
@@ -125,3 +135,80 @@ class Producto:
         self.ganancia_neta = (self.precio_manual - self.costo_unitario_real).quantize(
             Decimal("0.0001"), rounding=ROUND_HALF_UP
         )
+
+
+@dataclass
+class DetalleVenta:
+    producto_id: int
+    nombre_producto: str
+    cantidad: int
+    precio_unitario: Decimal
+    subtotal: Decimal = field(init=False)
+
+    def __post_init__(self) -> None:
+        if self.cantidad <= 0:
+            raise ValueError("La cantidad debe ser mayor que cero.")
+        if self.precio_unitario < Decimal("0"):
+            raise ValueError("El precio unitario no puede ser negativo.")
+        self.subtotal = (Decimal(str(self.cantidad)) * self.precio_unitario).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+
+@dataclass
+class Venta:
+    detalles: list[DetalleVenta]
+    pago_con: Decimal
+    cajero_id: str
+    descuento: Decimal = Decimal("0.00")
+    id: int | None = None
+    fecha_hora: str | None = None
+    estado: str = "COMPLETADA"
+
+    # Campos calculados
+    subtotal: Decimal = field(init=False)
+    impuesto: Decimal = field(init=False)
+    total: Decimal = field(init=False)
+    cambio: Decimal = field(init=False)
+
+    def __post_init__(self) -> None:
+        if not self.detalles:
+            raise ValueError("La venta debe tener al menos un detalle.")
+
+        suma_detalles = sum(d.subtotal for d in self.detalles)
+
+        if self.descuento < Decimal("0"):
+            raise ValueError("El descuento no puede ser negativo.")
+
+        if self.descuento > suma_detalles:
+            raise ValueError("El descuento no puede ser mayor que el subtotal.")
+
+        self.subtotal = suma_detalles - self.descuento
+
+        # Calcular impuesto (16% de IVA sobre el subtotal)
+        self.impuesto = (self.subtotal * Decimal("0.16")).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+        self.total = self.subtotal + self.impuesto
+
+        if self.pago_con < self.total:
+            raise ValueError(
+                f"El pago (${self.pago_con:.2f}) es insuficiente para cubrir "
+                f"el total de la venta (${self.total:.2f})."
+            )
+
+        self.cambio = (self.pago_con - self.total).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+
+
+@dataclass
+class LogAuditoria:
+    fecha_hora: str
+    cajero_id: str
+    operacion: str  # ANULACION, MODIFICACION_PRECIO, DESCUENTO_ESPECIAL, CIERRE_CAJA
+    estado_anterior: str | None
+    estado_nuevo: str | None
+    detalles: str
+    id: int | None = None
