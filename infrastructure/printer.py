@@ -21,6 +21,9 @@ y proporciona una interfaz limpia para la impresión de tickets de venta.
 Lanza excepciones específicas de PrinterError ante fallos simulados o reales.
 """
 
+from pathlib import Path
+from typing import Any
+
 
 class PrinterError(Exception):
     """
@@ -40,16 +43,24 @@ class ThermalPrinter:
     Encapsula la lógica de comunicación física con la impresora térmica (58mm/80mm).
     """
 
-    def __init__(self, ancho_papel: int = 80, puerto: str = "USB001") -> None:
+    def __init__(
+        self,
+        ancho_papel: int = 80,
+        puerto: str = "USB001",
+        ruta_log: str | Path | None = None,
+    ) -> None:
         self.ancho_papel = ancho_papel
         self.puerto = puerto
+        # Ruta del log de tickets. En producción apunta a %PROGRAMDATA%\Kosto\logs;
+        # si no se inyecta, conserva el comportamiento local para compatibilidad.
+        self.ruta_log = ruta_log
         # Estado de simulación para pruebas de resiliencia
         self.simular_fallo = False
         self.tipo_fallo = (
             "Sin papel"  # Opciones: "Sin papel", "Atasco de papel", "Desconectada"
         )
 
-    def imprimir_ticket(self, ticket_data: dict) -> str:
+    def imprimir_ticket(self, ticket_data: dict[str, Any]) -> str:
         """
         Intenta enviar el comando de impresión a la impresora.
         Si 'simular_fallo' es True, lanza un PrinterError específico
@@ -123,11 +134,16 @@ class ThermalPrinter:
 
         ticket_text = "\n".join(lineas)
 
-        # Guardar localmente
+        # Guardar localmente (en producción:
+        # %PROGRAMDATA%\Kosto\logs\ultimos_tickets.log)
         try:
-            with open("ultimos_tickets.log", "a", encoding="utf-8") as f:
+            ruta_log = (
+                self.ruta_log if self.ruta_log is not None else "ultimos_tickets.log"
+            )
+            with open(ruta_log, "a", encoding="utf-8") as f:
                 f.write(ticket_text)
-        except Exception:
+        except OSError:
+            # Un fallo al escribir el log jamás debe bloquear la venta
             pass
 
         return ticket_text

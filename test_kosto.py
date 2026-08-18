@@ -299,6 +299,9 @@ class TestDatabaseManager(unittest.TestCase):
             )
         )
 
+        assert p1.id is not None
+        assert p2.id is not None
+
         det1 = DetalleVenta(
             producto_id=p1.id,
             nombre_producto=p1.nombre,
@@ -325,6 +328,8 @@ class TestDatabaseManager(unittest.TestCase):
         # Verificar stock actualizado
         prod1_act = self.db.obtener_producto_por_id(p1.id)
         prod2_act = self.db.obtener_producto_por_id(p2.id)
+        assert prod1_act is not None
+        assert prod2_act is not None
         self.assertEqual(prod1_act.stock, 7)  # 10 - 3
         self.assertEqual(prod2_act.stock, 3)  # 5 - 2
 
@@ -349,6 +354,9 @@ class TestDatabaseManager(unittest.TestCase):
                 stock=1,  # Stock bajo!
             )
         )
+
+        assert p1.id is not None
+        assert p2.id is not None
 
         det1 = DetalleVenta(
             producto_id=p1.id,
@@ -377,6 +385,8 @@ class TestDatabaseManager(unittest.TestCase):
         # ACID: El stock de p1 NO debe haber cambiado (se revirtió la deducción)
         prod1_act = self.db.obtener_producto_por_id(p1.id)
         prod2_act = self.db.obtener_producto_por_id(p2.id)
+        assert prod1_act is not None
+        assert prod2_act is not None
         self.assertEqual(prod1_act.stock, 10)
         self.assertEqual(prod2_act.stock, 1)
 
@@ -396,6 +406,7 @@ class TestDatabaseManager(unittest.TestCase):
                 stock=5,
             )
         )
+        assert p.id is not None
         det = DetalleVenta(
             producto_id=p.id,
             nombre_producto=p.nombre,
@@ -410,7 +421,10 @@ class TestDatabaseManager(unittest.TestCase):
         )
 
         v_guardada = self.db.registrar_venta_y_deducir_stock(v)
-        self.assertEqual(self.db.obtener_producto_por_id(p.id).stock, 2)
+        assert v_guardada.id is not None
+        prod_despues = self.db.obtener_producto_por_id(p.id)
+        assert prod_despues is not None
+        self.assertEqual(prod_despues.stock, 2)
 
         # Anular venta
         self.db.anular_venta_y_restaurar_stock(
@@ -418,7 +432,9 @@ class TestDatabaseManager(unittest.TestCase):
         )
 
         # Verificar stock restaurado
-        self.assertEqual(self.db.obtener_producto_por_id(p.id).stock, 5)
+        prod_restaurado = self.db.obtener_producto_por_id(p.id)
+        assert prod_restaurado is not None
+        self.assertEqual(prod_restaurado.stock, 5)
 
         # Verificar estado venta
         ventas = self.db.obtener_ventas()
@@ -451,6 +467,7 @@ class TestPOSUseCase(unittest.TestCase):
             )
         )
 
+        assert p.id is not None
         items = [{"producto_id": p.id, "cantidad": 2}]
 
         venta, err_p = self.use_case.procesar_pago_efectivo(
@@ -462,7 +479,9 @@ class TestPOSUseCase(unittest.TestCase):
         self.assertIsNone(err_p)
         self.assertEqual(venta.subtotal, Decimal("2.00"))
         # El stock se debió deducir
-        self.assertEqual(self.db.obtener_producto_por_id(p.id).stock, 3)
+        prod_despues = self.db.obtener_producto_por_id(p.id)
+        assert prod_despues is not None
+        self.assertEqual(prod_despues.stock, 3)
 
     def test_procesar_pago_efectivo_resiliencia_hardware(self) -> None:
         """
@@ -482,6 +501,7 @@ class TestPOSUseCase(unittest.TestCase):
         self.printer.simular_fallo = True
         self.printer.tipo_fallo = "Atasco de papel"
 
+        assert p.id is not None
         items = [{"producto_id": p.id, "cantidad": 2}]
 
         venta, err_p = self.use_case.procesar_pago_efectivo(
@@ -492,9 +512,12 @@ class TestPOSUseCase(unittest.TestCase):
 
         # Resiliencia: la base de datos se confirmó (venta guardada y stock deducido)
         self.assertIsNotNone(venta.id)
-        self.assertEqual(self.db.obtener_producto_por_id(p.id).stock, 3)
+        prod_despues = self.db.obtener_producto_por_id(p.id)
+        assert prod_despues is not None
+        self.assertEqual(prod_despues.stock, 3)
 
         # Pero el sistema retorna un aviso no bloqueante detallando el error físico
+        assert err_p is not None
         self.assertIsNotNone(err_p)
         self.assertIn("Atasco de papel", err_p)
 
@@ -517,12 +540,14 @@ class TestPOSUseCase(unittest.TestCase):
             )
         )
 
+        assert p.id is not None
         self.use_case.modificar_precio_manual_con_auditoria(
             p.id, Decimal("1.50"), "SUPERVISOR"
         )
 
         # Verificar precio actualizado
         prod_act = self.db.obtener_producto_por_id(p.id)
+        assert prod_act is not None
         self.assertEqual(prod_act.precio_manual, Decimal("1.50"))
 
         # Verificar log en la auditoría

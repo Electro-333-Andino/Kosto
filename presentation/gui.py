@@ -22,7 +22,9 @@ Delega toda la lógica de negocio y persistencia en POSUseCase y el dominio.
 """
 
 import tkinter as tk
-from decimal import Decimal, InvalidOperation
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
+from tkinter import messagebox
+from typing import Any
 
 import customtkinter as ctk
 
@@ -32,7 +34,7 @@ from infrastructure.database import DatabaseManager
 from infrastructure.printer import ThermalPrinter
 
 
-class CustomConfirmDialog(ctk.CTkToplevel):
+class CustomConfirmDialog(ctk.CTkToplevel):  # type: ignore[misc]
     """
     Cuadro de diálogo de confirmación personalizado y modal.
     Adopta completamente el tema oscuro y los colores
@@ -110,17 +112,18 @@ class CustomConfirmDialog(ctk.CTkToplevel):
         self.destroy()
 
 
-class KostoApp(ctk.CTk):
+class KostoApp(ctk.CTk):  # type: ignore[misc]
     """
     Ventana principal del sistema POS e inventario Kosto.
     """
 
-    def __init__(self, db: DatabaseManager):
+    def __init__(self, db: DatabaseManager, tickets_log_path: str | None = None):
         super().__init__()
         self.db = db
 
-        # Inicializar impresora e inyectar en Casos de Uso
-        self.printer = ThermalPrinter()
+        # Inicializar impresora e inyectar en Casos de Uso.
+        # En producción la ruta del log de tickets apunta a %PROGRAMDATA%\Kosto\logs.
+        self.printer = ThermalPrinter(ruta_log=tickets_log_path)
         self.pos_use_case = POSUseCase(self.db, self.printer)
 
         # Estados de la UI
@@ -165,6 +168,20 @@ class KostoApp(ctk.CTk):
         self.refresh_pos_catalog()
         self.refresh_auditoria_tab()
 
+    def report_callback_exception(
+        self, exc: type[BaseException], val: BaseException, tb: Any
+    ) -> None:
+        """
+        Manejador global de excepciones no capturadas de los callbacks de Tk.
+        Muestra un mensaje limpio en la UI en lugar de crashear o imprimir
+        un traceback silencioso en la ventana de consola.
+        """
+        messagebox.showerror(
+            "Error Inesperado",
+            "Ocurrió un error inesperado en la aplicación.\n\n"
+            f"{type(val).__name__}: {val}",
+        )
+
     def setup_tabs(self) -> None:
         """
         Crea las tres pestañas principales usando CTkTabview.
@@ -196,11 +213,11 @@ class KostoApp(ctk.CTk):
         Crea la interfaz de control de productos de inventario.
         """
         self.tab_inventario.grid_rowconfigure(0, weight=1)
-        self.tab_inventario.grid_columnconfigure(0, weight=3)  # Formulario (30%)
-        self.tab_inventario.grid_columnconfigure(1, weight=7)  # Tabla (70%)
+        self.tab_inventario.grid_columnconfigure(0, weight=25)  # Formulario (25%)
+        self.tab_inventario.grid_columnconfigure(1, weight=75)  # Tabla (75%)
 
-        # Panel izquierdo: Formulario
-        self.frame_inv_formulario = ctk.CTkFrame(
+        # Panel izquierdo: Formulario (Scrollable para visibilidad de botones)
+        self.frame_inv_formulario = ctk.CTkScrollableFrame(
             self.tab_inventario,
             fg_color=self.COLOR_BG_SECUNDARIO,
             border_color=self.COLOR_BORDE,
@@ -502,7 +519,7 @@ class KostoApp(ctk.CTk):
         )
         self.frame_headers.grid(row=1, column=0, sticky="ew", pady=(0, 5))
 
-        self.column_weights = [4, 2, 1, 2, 2, 2, 1.5, 2.5, 3.5]
+        self.column_weights = [3.5, 1.5, 1.0, 1.5, 1.5, 1.5, 1.2, 1.8, 2.5]
         for idx, w in enumerate(self.column_weights):
             self.frame_headers.grid_columnconfigure(
                 idx, weight=int(w * 10), uniform="inv_table_col"
@@ -797,7 +814,7 @@ class KostoApp(ctk.CTk):
                 text_color=self.COLOR_TEXTO_PRINCIPAL,
                 anchor="center",
             )
-            lbl_costo_p.grid(row=0, column=1, padx=5, pady=6, sticky="ew")
+            lbl_costo_p.grid(row=0, column=1, padx=2, pady=6, sticky="ew")
 
             lbl_unid = ctk.CTkLabel(
                 row_frame,
@@ -806,7 +823,7 @@ class KostoApp(ctk.CTk):
                 text_color=self.COLOR_TEXTO_PRINCIPAL,
                 anchor="center",
             )
-            lbl_unid.grid(row=0, column=2, padx=5, pady=6, sticky="ew")
+            lbl_unid.grid(row=0, column=2, padx=2, pady=6, sticky="ew")
 
             lbl_costo_u = ctk.CTkLabel(
                 row_frame,
@@ -815,7 +832,7 @@ class KostoApp(ctk.CTk):
                 text_color=self.COLOR_TEXTO_SECUNDARIO,
                 anchor="center",
             )
-            lbl_costo_u.grid(row=0, column=3, padx=5, pady=6, sticky="ew")
+            lbl_costo_u.grid(row=0, column=3, padx=2, pady=6, sticky="ew")
 
             lbl_sug = ctk.CTkLabel(
                 row_frame,
@@ -824,7 +841,7 @@ class KostoApp(ctk.CTk):
                 text_color=self.COLOR_TEXTO_SECUNDARIO,
                 anchor="center",
             )
-            lbl_sug.grid(row=0, column=4, padx=5, pady=6, sticky="ew")
+            lbl_sug.grid(row=0, column=4, padx=2, pady=6, sticky="ew")
 
             lbl_man = ctk.CTkLabel(
                 row_frame,
@@ -833,7 +850,7 @@ class KostoApp(ctk.CTk):
                 text_color=self.COLOR_BOTONES,
                 anchor="center",
             )
-            lbl_man.grid(row=0, column=5, padx=5, pady=6, sticky="ew")
+            lbl_man.grid(row=0, column=5, padx=2, pady=6, sticky="ew")
 
             # Stock físico column
             color_stock = (
@@ -848,7 +865,7 @@ class KostoApp(ctk.CTk):
                 text_color=color_stock,
                 anchor="center",
             )
-            lbl_stk.grid(row=0, column=6, padx=5, pady=6, sticky="ew")
+            lbl_stk.grid(row=0, column=6, padx=2, pady=6, sticky="ew")
 
             # Ganancia
             color_ganancia = (
@@ -863,7 +880,7 @@ class KostoApp(ctk.CTk):
                 text_color=color_ganancia,
                 anchor="center",
             )
-            lbl_gan.grid(row=0, column=7, padx=5, pady=6, sticky="ew")
+            lbl_gan.grid(row=0, column=7, padx=2, pady=6, sticky="ew")
 
             # Acciones
             frame_acciones = ctk.CTkFrame(row_frame, fg_color="transparent")
@@ -1665,7 +1682,7 @@ class KostoApp(ctk.CTk):
 
         # Impuesto (16%)
         iva = (subtotal * Decimal("0.16")).quantize(
-            Decimal("0.01"), rounding=tk.ROUND_HALF_UP
+            Decimal("0.01"), rounding=ROUND_HALF_UP
         )
         total = subtotal + iva
 
@@ -2158,21 +2175,9 @@ class KostoApp(ctk.CTk):
         for widget in self.scroll_detalles_venta.winfo_children():
             widget.destroy()
 
-        # Obtener venta y detalles de forma segura
-        cursor = self.db.conn.cursor()
-        cursor.execute(
-            """
-            SELECT v.id, v.fecha_hora, v.total, v.estado,
-                   d.producto_id, d.cantidad, d.precio_unitario,
-                   d.subtotal, p.nombre
-            FROM ventas v
-            JOIN detalles_venta d ON v.id = d.venta_id
-            JOIN productos p ON d.producto_id = p.id
-            WHERE v.id = ?
-        """,
-            (venta_id,),
-        )
-        rows = cursor.fetchall()
+        # Obtener venta y detalles de forma segura a través del repositorio
+        # (la capa de presentación jamás accede directamente a la conexión SQLite).
+        rows = self.db.obtener_detalles_venta(venta_id)
 
         if not rows:
             return
@@ -2281,18 +2286,18 @@ class KostoApp(ctk.CTk):
                 self.btn_anular_venta.configure(state="disabled")
 
                 # Mensaje de exito popup local
-                tk.messagebox.showinfo(
+                messagebox.showinfo(
                     "Anulación Exitosa",
                     f"Venta {self.venta_seleccionada_id} anulada con éxito.",
                 )
 
             except Exception as e:
-                tk.messagebox.showerror("Error al Anular", str(e))
+                messagebox.showerror("Error al Anular", str(e))
 
     def ejecutar_cierre_caja(self) -> None:
         cajero = self.entry_cajero_cierre.get().strip()
         if not cajero:
-            tk.messagebox.showwarning(
+            messagebox.showwarning(
                 "ID requerido",
                 "Ingrese el ID del cajero para realizar el cierre de caja.",
             )
@@ -2324,7 +2329,7 @@ class KostoApp(ctk.CTk):
                     f"=============================="
                 )
 
-                tk.messagebox.showinfo("Resumen Cierre Caja", mensaje_cierre)
+                messagebox.showinfo("Resumen Cierre Caja", mensaje_cierre)
 
             except Exception as e:
-                tk.messagebox.showerror("Error de Cierre", str(e))
+                messagebox.showerror("Error de Cierre", str(e))

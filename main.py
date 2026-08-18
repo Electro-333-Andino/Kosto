@@ -18,13 +18,30 @@ main.py
 
 Punto de entrada principal de la aplicación Kosto.
 Orquesta e inicializa las dependencias siguiendo Clean Architecture:
-Crea el DatabaseManager (infraestructura) y lo inyecta en KostoApp (presentación).
+1. Garantiza la estructura de datos en %PROGRAMDATA%\\Kosto (Windows).
+2. Crea el DatabaseManager (infraestructura) y lo inyecta en KostoApp (presentación).
+3. Cierra la conexión de forma controlada al terminar.
 """
+
+import tkinter as tk
+from tkinter import messagebox
 
 import customtkinter as ctk
 
-from infrastructure.database import DatabaseManager
+from infrastructure.database import DatabaseManager, DatabaseOperationError
+from infrastructure.paths import KostoPaths
 from presentation.gui import KostoApp
+
+
+def _mostrar_error_fatal(mensaje: str) -> None:
+    """
+    Muestra un mensaje de error limpio antes de que la ventana principal exista.
+    Evita que la aplicación falle silenciosamente o con traceback en consola.
+    """
+    root = tk.Tk()
+    root.withdraw()
+    messagebox.showerror("Kosto - Error de Inicialización", mensaje)
+    root.destroy()
 
 
 def main() -> None:
@@ -35,15 +52,34 @@ def main() -> None:
     ctk.set_appearance_mode("Dark")
     ctk.set_default_color_theme("blue")
 
-    # Inicializar base de datos (Infraestructura)
-    # Se crea el archivo local 'kosto.db' en el directorio de ejecución
-    db_manager = DatabaseManager("kosto.db")
+    # 1. Rutas Windows: el .exe vive en Program Files (solo lectura);
+    # la BD y los logs deben crearse en %PROGRAMDATA%\\Kosto ANTES de conectar.
+    try:
+        paths = KostoPaths()
+        paths.ensure_structure()
+    except OSError as err:
+        _mostrar_error_fatal(
+            "No se pudo crear la estructura de datos en %PROGRAMDATA%\\Kosto.\n\n"
+            f"Detalle: {err}\n\n"
+            "Verifique que el usuario tenga permisos de escritura "
+            "sobre la carpeta ProgramData."
+        )
+        return
 
-    # Inicializar e inyectar dependencia en la GUI (Presentación)
-    app = KostoApp(db=db_manager)
+    # 2. Conexión a la base de datos con manejo limpio de errores de permisos
+    try:
+        db_manager = DatabaseManager(paths.db_path)
+    except DatabaseOperationError as err:
+        _mostrar_error_fatal(str(err))
+        return
 
-    # Iniciar ciclo de eventos principal
-    app.mainloop()
+    try:
+        # 3. Inicializar e inyectar dependencias en la GUI (Presentación)
+        app = KostoApp(db=db_manager, tickets_log_path=str(paths.tickets_log_path))
+        app.mainloop()
+    finally:
+        # 4. Cierre controlado de la conexión para evitar corrupción de datos
+        db_manager.cerrar_conexion()
 
 
 if __name__ == "__main__":

@@ -27,3 +27,50 @@ El módulo se desacopla en cuatro capas independientes y unidireccionales para g
 * **Nomenclatura Semántica:** Nombres de funciones explícitos y descriptivos orientados al dominio del negocio (ej. `procesar_pago_efectivo()`, `deducir_inventario_por_venta()`). Se prohíben abreviaturas crípticas o ambiguas.
 * **Resiliencia ante Fallos de Hardware:** Las excepciones de comunicación con la impresora térmica (ausencia de papel, atasco físico, cable USB desconectado o bloqueo de cola de impresión en Windows) deben ser capturadas de manera específica en la capa de Infraestructura. **Estos fallos físicos bajo ninguna circunstancia deben colgar o congelar la aplicación principal**. El sistema confirmará la venta en la base de datos y ofrecerá al cajero un aviso visual no bloqueante con la opción de "Reintentar Impresión" una vez que el problema del hardware sea subsanado.
 """
+
+Actúa como un Desarrollador Senior de Software experto en Python, CustomTkinter y arquitectura de bases de datos relacionales (SQLite/SQLAlchemy). Necesitas refactorizar una aplicación de inventario y punto de venta (POS) de escritorio para Windows.
+
+Entorno de Ejecución:
+El sistema operará en una PC/Servidor con Windows 10 aislada (sin conexión a internet). El código debe ser altamente escalable (utilizando el patrón MVC: Modelo-Vista-Controlador) y prepararse para una compilación con PyInstaller.
+
+Requerimientos de Refactorización:
+
+1. Gestión de Rutas y Cumplimiento del Estándar Windows (Separación de Datos):
+
+Modifica el gestor de rutas del código. El ejecutable final residirá en C:\Program Files\Kosto (entorno de solo lectura).
+
+La base de datos SQLite (.db) y los logs deben ubicarse obligatoriamente en C:\ProgramData\Kosto (o os.environ.get('PROGRAMDATA')).
+
+Implementa una clase de inicialización que verifique si la estructura de carpetas en ProgramData existe al arrancar. Si no existe, el código de Python debe crearla automáticamente antes de intentar conectar a la base de datos.
+
+2. Seguridad y Manejo de la Base de Datos:
+
+Implementa todas las consultas utilizando sentencias parametrizadas o un ORM (como SQLAlchemy) para garantizar seguridad y facilitar una futura migración.
+
+El código debe capturar excepciones (sqlite3.OperationalError o equivalentes del ORM) para manejar correctamente los bloqueos si Windows restringe los permisos de escritura/eliminación del archivo físico. Mostrar mensajes de error limpios en la UI en lugar de crashear.
+
+Asegura el cierre correcto de las conexiones a la base de datos (uso de context managers with) para evitar corrupción de datos en apagados repentinos.
+
+3. Corrección de Bug en UI (Botones Invisibles):
+
+Refactoriza las clases de las vistas de CustomTkinter. Actualmente, los botones de "Guardar", "Editar" y "Eliminar" productos se instancian pero no son visibles en pantalla.
+
+Aplica las siguientes correcciones en la vista:
+
+Asegura que el parámetro master de los botones apunte al CTkFrame correcto y visible.
+
+Verifica que los métodos de renderizado (.grid(), .pack() o .place()) se estén llamando correctamente sobre las instancias de los botones.
+
+Corrige cualquier problema de superposición (Z-index), asegurando que ningún CTkFrame contenedor se dibuje encima de los botones.
+
+Asegura que las funciones de acción pasadas a command= no tengan paréntesis para no bloquear la carga del widget.
+
+4. Restricciones Offline y Diseño Escalable:
+
+Garantiza que no existan llamadas a APIs externas, descargas de fuentes o dependencias que requieran red.
+
+Separa estrictamente la lógica de la interfaz (Views), las consultas a la base de datos (Models) y el manejo de eventos (Controllers).
+
+Prepara las referencias de imágenes, íconos y fuentes utilizando una función de resolución de rutas relativas (sys._MEIPASS) para que funcionen correctamente tras compilar.
+
+Por favor, entrégame el código de los módulos refactorizados (models.py, views.py, controllers.py y main.py) aplicando estas directrices.

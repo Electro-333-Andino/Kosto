@@ -20,10 +20,48 @@ Implementa operaciones CRUD seguras usando consultas
 parametrizadas para evitar inyecciones SQL, y transacciones ACID.
 """
 
+from __future__ import annotations
+
+import functools
 import sqlite3
-from typing import Any
+from collections.abc import Callable
+from pathlib import Path
+from types import TracebackType
+from typing import Any, cast
 
 from domain.models import LogAuditoria, Producto, Venta
+
+
+class DatabaseOperationError(Exception):
+    """
+    Excepción de infraestructura con mensaje limpio para la capa de presentación.
+    Se eleva cuando SQLite no puede acceder al archivo físico (permisos de
+    escritura restringidos por Windows, archivo bloqueado por otro proceso,
+    disco lleno, etc.) en lugar de propagar errores técnicos de sqlite3.
+    """
+
+
+def _convertir_errores_sqlite[F: Callable[..., Any]](func: F) -> F:
+    """
+    Decorador que convierte errores técnicos de sqlite3 en DatabaseOperationError
+    con un mensaje accionable, para que la UI muestre un aviso limpio y la
+    aplicación jamás crashee por un fallo de permisos o bloqueo del archivo.
+    """
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except DatabaseOperationError:
+            raise
+        except sqlite3.Error as err:
+            raise DatabaseOperationError(
+                "No se pudo acceder a la base de datos. "
+                "Verifique que %PROGRAMDATA%\\Kosto tenga permisos de escritura "
+                "y que el archivo kosto.db no esté bloqueado por otro proceso."
+            ) from err
+
+    return cast(F, wrapper)
 
 
 class DatabaseManager:
@@ -33,13 +71,33 @@ class DatabaseManager:
     inyección SQL.
     """
 
-    def __init__(self, db_path: str = "kosto.db"):
-        self.db_path = db_path
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+    def __init__(self, db_path: str | Path = "kosto.db"):
+        self.db_path = str(db_path)
+        try:
+            self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        except sqlite3.Error as err:
+            raise DatabaseOperationError(
+                f"No se pudo conectar a la base de datos en {self.db_path}. "
+                "Verifique los permisos de escritura y que la ruta exista."
+            ) from err
         # Usar sqlite3.Row para acceder a columnas de forma segura por su nombre
         self.conn.row_factory = sqlite3.Row
         self.inicializar_db()
 
+    def __enter__(self) -> DatabaseManager:
+        """Permite usar el administrador como context manager y cerrar la conexión."""
+        return self
+
+    def __exit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_value: BaseException | None,
+        traceback: TracebackType | None,
+    ) -> None:
+        """Cierra la conexión al salir del bloque with, evitando corrupción de datos."""
+        self.cerrar_conexion()
+
+    @_convertir_errores_sqlite
     def inicializar_db(self) -> None:
         """
         Crea la tabla 'productos' si no existe, y añade las tablas necesarias
@@ -114,6 +172,7 @@ class DatabaseManager:
                 )
             """)
 
+    @_convertir_errores_sqlite
     def insertar_producto(self, producto: Producto) -> Producto:
         """
         Inserta un nuevo producto en la base de datos y le asigna el ID
@@ -158,6 +217,7 @@ class DatabaseManager:
 
         return producto
 
+    @_convertir_errores_sqlite
     def actualizar_producto(self, producto: Producto) -> None:
         """
         Actualiza los datos de un producto existente en la base de datos.
@@ -197,6 +257,7 @@ class DatabaseManager:
                 ),
             )
 
+    @_convertir_errores_sqlite
     def obtener_productos(self, busqueda: str | None = None) -> list[Producto]:
         """
         Obtiene la lista de todos los productos.
@@ -242,6 +303,7 @@ class DatabaseManager:
             productos.append(prod)
         return productos
 
+    @_convertir_errores_sqlite
     def obtener_producto_por_id(self, producto_id: int) -> Producto | None:
         """
         Obtiene un producto específico por su ID de forma parametrizada.
@@ -267,6 +329,7 @@ class DatabaseManager:
             stock=row["stock"],
         )
 
+    @_convertir_errores_sqlite
     def eliminar_producto(self, producto_id: int) -> None:
         """
         Elimina de manera segura un producto por su ID.
@@ -275,6 +338,7 @@ class DatabaseManager:
             cursor = self.conn.cursor()
             cursor.execute("DELETE FROM productos WHERE id = ?", (producto_id,))
 
+    @_convertir_errores_sqlite
     def registrar_venta_y_deducir_stock(self, venta: Venta) -> Venta:
         """
         Registra una venta con sus detalles y deduce la cantidad del stock
@@ -365,6 +429,7 @@ class DatabaseManager:
             # automáticamente en caso de excepción.
             raise e
 
+    @_convertir_errores_sqlite
     def anular_venta_y_restaurar_stock(
         self, venta_id: int, cajero_id: str, fecha_hora: str
     ) -> None:
@@ -449,6 +514,7 @@ class DatabaseManager:
         except Exception as e:
             raise e
 
+    @_convertir_errores_sqlite
     def registrar_log_auditoria(self, log: LogAuditoria) -> LogAuditoria:
         """
         Inserta un registro de auditoría en la tabla Logs_Auditoria.
@@ -478,6 +544,7 @@ class DatabaseManager:
                 log.id = row_id
         return log
 
+    @_convertir_errores_sqlite
     def obtener_logs_auditoria(self) -> list[dict[str, Any]]:
         """
         Retorna todos los registros de auditoría almacenados.
@@ -492,6 +559,7 @@ class DatabaseManager:
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+    @_convertir_errores_sqlite
     def obtener_ventas(self) -> list[dict[str, Any]]:
         """
         Retorna todas las ventas registradas con su estado.
@@ -506,6 +574,29 @@ class DatabaseManager:
         rows = cursor.fetchall()
         return [dict(row) for row in rows]
 
+    @_convertir_errores_sqlite
+    def obtener_detalles_venta(self, venta_id: int) -> list[dict[str, Any]]:
+        """
+        Retorna los detalles (productos vendidos) de una venta específica,
+        para que la capa de presentación jamás acceda directamente a la conexión.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            SELECT v.id, v.fecha_hora, v.total, v.estado,
+                   d.producto_id, d.cantidad, d.precio_unitario,
+                   d.subtotal, p.nombre
+            FROM ventas v
+            JOIN detalles_venta d ON v.id = d.venta_id
+            JOIN productos p ON d.producto_id = p.id
+            WHERE v.id = ?
+        """,
+            (venta_id,),
+        )
+        rows = cursor.fetchall()
+        return [dict(row) for row in rows]
+
+    @_convertir_errores_sqlite
     def obtener_resumen_ventas_activas(self, cajero_id: str) -> dict[str, Any]:
         """
         Calcula las métricas de las ventas con estado 'COMPLETADA'
@@ -528,6 +619,7 @@ class DatabaseManager:
             "total_descuentos": row["desc"] if row["desc"] is not None else 0.0,
         }
 
+    @_convertir_errores_sqlite
     def marcar_ventas_como_cerradas(self, cajero_id: str) -> None:
         """
         Cambia el estado de las ventas de 'COMPLETADA' a 'CERRADA_SESION'
